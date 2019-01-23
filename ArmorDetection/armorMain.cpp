@@ -1,35 +1,57 @@
 #include <iostream>
+#include <cstdlib>
+#include <cstdio>
+#include <vector>
+#include <cstring>
 #include "opencv2/highgui.hpp"
 #include "opencv2/imgproc.hpp"
-#include <vector>
 #include "armorDetect.h"
 #define DEBUG 1
 #define VIDEO 1
 using namespace cv;
 using namespace std;
 
+void setLabel(cv::Mat &im, const std::string label, const cv::Point & pos, const cv::Scalar &colpos)
+{
+    const int fontface = cv::FONT_HERSHEY_SIMPLEX;
+    const double scale = 0.75;
+    const int thickness = 2;
+    int baseline = 0;
+    cv::Size text = cv::getTextSize(label, fontface, scale, thickness, &baseline);
+    cv::rectangle(im, pos + cv::Point(0, baseline), pos + cv::Point(text.width, -text.height), CV_RGB(0,0,0), FILLED);
+    cv::putText(im, label, pos, fontface, scale, colpos, thickness, 8);
+}
+
 int main (int argvc, char ** argv)
 {
+    char text_buffer[100];
 #if VIDEO
-    VideoCapture cap(1);
-    if ( !cap.isOpened() )
+    cout << "Camera ID = ";
+    int camera_id;
+    cin >> camera_id;
+    VideoCapture cap;
+    cap.open(camera_id);
+    while(!cap.isOpened())
     {
-        cout << "Cannot open the web cam" << endl;
-        return -1;
+        cout << "Unable to open the specified camera." << endl;
+        cout << "(Ctrl-C to exit) Retry. Camera ID = ";
+        cin >> camera_id;
+        cap.open(camera_id);
     }
     vector<pair<vector<Point2f>, float>> ROI;
     Mat inputFrame;
     ArmorDetect detector = ArmorDetect();
     while (true)
     {
-        double t =(double)getTickCount();
-        bool fSuccess = cap.read(inputFrame);
-
-        if (!fSuccess)
+        double t = (double)getTickCount();
+        if(!cap.read(inputFrame))
         {
             cout << "Fail to read frame" << endl;
+            return 1;
         }
-        detector.process( inputFrame, ROI);
+        detector.process(inputFrame, ROI);
+        const double latency = ((double)getTickCount() - t) / getTickFrequency();
+        const double fps = 1 / latency;
 #if DEBUG
         if (ROI.size() != 0)
         {
@@ -41,20 +63,19 @@ int main (int argvc, char ** argv)
                 line( inputFrame, ROI[i].first[2], ROI[i].first[0], Scalar (0, 255, 255), 3, 8 );
             }
         }
-
+        sprintf(text_buffer, "Latency = %.3f ms", latency * 1000);
+        setLabel(inputFrame, text_buffer, Point(50, 50), Scalar(255, 255, 255));
+        sprintf(text_buffer, "%.1f FPS", fps);
+        setLabel(inputFrame, text_buffer, Point(50, 80), Scalar(255, 255, 255));
         namedWindow ("debug4", WINDOW_NORMAL);
         imshow ("debug4", inputFrame);
 #endif
-        //waitKey(0);
-
-        if (waitKey(30) == 27)
+        if(waitKey(1) == 27)
         {
             cout << "esc key is pressed by user" << endl;
             break;
         }
-        double fps = 1/(((double)getTickCount() - t)/getTickFrequency());
         cout << "fps: " << fps << endl;
-
     }
 #else
     Mat inputImage;
